@@ -1,4 +1,4 @@
-import { HttpApi } from '@fjell/http-api';
+import { HttpApi, isFjellHttpError } from '@fjell/http-api';
 import {
   ClientApiError,
   createHttpError,
@@ -239,6 +239,19 @@ export class HttpWrapper {
     // If it's already a ClientApiError, return as-is
     if (error instanceof ClientApiError) {
       return error;
+    }
+
+    // Handle structured errors thrown by @fjell/http-api
+    if (isFjellHttpError(error)) {
+      return createHttpError(
+        error.httpResponseCode,
+        error.message,
+        error.fjellError,
+        {
+          ...errorContext,
+          requestInfo: error.requestInfo
+        }
+      );
     }
 
     // Handle HTTP response errors
