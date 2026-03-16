@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
  
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { HttpApi } from '@fjell/http-api';
+import { FjellHttpError, HttpApi } from '@fjell/http-api';
 import { HttpWrapper, RetryConfig } from '../../src/http/HttpWrapper';
 import {
   AuthenticationError,
@@ -365,6 +365,26 @@ describe('HttpWrapper', () => {
         message: expect.stringContaining('Network error: Something went wrong'),
         code: 'NETWORK_ERROR',
         isRetryable: true
+      });
+    });
+
+    it('should convert FjellHttpError to HTTP client error', async () => {
+      const noRetryWrapper = new HttpWrapper(mockHttpApi, { maxRetries: 0 });
+      const fjellHttpError = new FjellHttpError(
+        'Widget missing',
+        {
+          code: 'NOT_FOUND',
+          message: 'Widget missing',
+          operation: { type: 'get', name: 'getWidget', params: { id: 'w1' } },
+          context: { itemType: 'widget' }
+        },
+        404
+      );
+      vi.mocked(mockHttpApi.httpGet).mockRejectedValue(fjellHttpError);
+
+      await expect(noRetryWrapper.get('/test-url')).rejects.toMatchObject({
+        code: 'NOT_FOUND_ERROR',
+        isRetryable: false
       });
     });
   });
