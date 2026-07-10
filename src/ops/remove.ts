@@ -9,7 +9,7 @@ import { HttpApi } from "@fjell/http-api";
 import { ClientApiOptions } from "../ClientApiOptions";
 import LibLogger from "../logger";
 import { Utilities } from "../Utilities";
-import { calculateRetryDelay, enhanceError, shouldRetryError } from "./errorHandling";
+import { calculateRetryDelay, enhanceError, isNotFoundError, shouldRetryError } from "./errorHandling";
 
 const logger = LibLogger.get('client-api', 'ops', 'remove');
 
@@ -102,7 +102,7 @@ export const getRemoveOperation = <
         const attemptDuration = Date.now() - attemptStartTime;
 
         // Handle 404 errors specially - item already deleted, consider success
-        if (error.status === 404) {
+        if (isNotFoundError(error)) {
           logger.debug('CLIENT_API: remove() - item not found (404), treating as success', {
             ...operationContext,
             attemptDuration,

@@ -304,7 +304,21 @@ describe("getAllFacetOperation", () => {
       expect(Array.isArray(result)).toBe(true);
     });
 
-    it("should handle null response", async () => {
+    it("should normalize single-object response to an array", async () => {
+      const mockFacetData = { id: "1", name: "Single Item" };
+      const facetName = "single";
+
+      vi.mocked(mockHttpApi.httpGet).mockResolvedValue(mockFacetData);
+
+      const allFacet = getAllFacetOperation(mockHttpApi, mockApiOptions, mockUtilities);
+
+      const result = await allFacet(facetName);
+
+      expect(mockUtilities.processArray).toHaveBeenCalled();
+      expect(result).toEqual([mockFacetData]);
+    });
+
+    it("should handle null response as empty array", async () => {
       const facetName = "null-response";
 
       vi.mocked(mockHttpApi.httpGet).mockResolvedValue(null);
@@ -313,10 +327,10 @@ describe("getAllFacetOperation", () => {
 
       const result = await allFacet(facetName);
 
-      expect(result).toBeNull();
+      expect(result).toEqual([]);
     });
 
-    it("should handle undefined response", async () => {
+    it("should handle undefined response as empty array", async () => {
       const facetName = "undefined-response";
 
       vi.mocked(mockHttpApi.httpGet).mockResolvedValue(void 0);
@@ -325,7 +339,7 @@ describe("getAllFacetOperation", () => {
 
       const result = await allFacet(facetName);
 
-      expect(result).toBeUndefined();
+      expect(result).toEqual([]);
     });
 
     it("should handle facet names with special characters", async () => {

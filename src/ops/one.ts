@@ -51,13 +51,28 @@ export const getOneOperation = <
     });
 
     // Server returns AllOperationResult<V> with items and metadata
-    const result = await api.httpGet<AllOperationResult<V>>(
+    const result = await api.httpGet<AllOperationResult<V> | V[]>(
       utilities.getPath(loc),
       requestOptions,
     );
 
-    // Process items through utilities (date conversion, validation, etc.)
-    const items = await utilities.processArray(Promise.resolve(result.items));
+    // Defensively extract items (mirror all.ts)
+    let itemsArray: V[] = [];
+    if (result) {
+      if (!Array.isArray(result) && result.items && Array.isArray(result.items)) {
+        itemsArray = result.items;
+      } else if (Array.isArray(result)) {
+        itemsArray = result;
+      } else {
+        logger.warning('Unexpected response format from server in one()', {
+          resultType: typeof result,
+          hasItems: result && typeof result === 'object' && 'items' in result,
+        });
+        itemsArray = [];
+      }
+    }
+
+    const items = await utilities.processArray(Promise.resolve(itemsArray));
 
     let item: V | null = null;
     if (items.length > 0) {

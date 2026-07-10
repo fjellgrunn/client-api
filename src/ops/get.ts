@@ -9,7 +9,7 @@ import { HttpApi } from "@fjell/http-api";
 import { ClientApiOptions } from "../ClientApiOptions";
 import LibLogger from "../logger";
 import { Utilities } from "../Utilities";
-import { calculateRetryDelay, enhanceError, shouldRetryError } from "./errorHandling";
+import { calculateRetryDelay, enhanceError, isNotFoundError, shouldRetryError } from "./errorHandling";
 
 const logger = LibLogger.get('client-api', 'ops', 'get');
 
@@ -104,7 +104,7 @@ export const getGetOperation = <
         const attemptDuration = Date.now() - attemptStartTime;
 
         // Handle 404 errors specially - return null instead of throwing
-        if (error.status === 404) {
+        if (isNotFoundError(error)) {
           logger.debug('CLIENT_API: get() - item not found (404)', {
             ...operationContext,
             attemptDuration,

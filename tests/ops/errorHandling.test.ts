@@ -1,11 +1,14 @@
  
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { FjellHttpError } from '@fjell/http-api';
 import {
   calculateRetryDelay,
   enhanceError,
   executeErrorHandler,
   executeWithRetry,
+  getHttpStatus,
   getRetryConfig,
+  isNotFoundError,
   shouldRetryError
 } from '../../src/ops/errorHandling';
 
@@ -19,6 +22,22 @@ describe('errorHandling', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  describe('getHttpStatus / isNotFoundError', () => {
+    it('reads status, httpResponseCode, and statusCode', () => {
+      expect(getHttpStatus({ status: 404 })).toBe(404);
+      expect(getHttpStatus({ httpResponseCode: 500 })).toBe(500);
+      expect(getHttpStatus({ statusCode: 429 })).toBe(429);
+      expect(getHttpStatus(null)).toBeUndefined();
+      expect(getHttpStatus({})).toBeUndefined();
+    });
+
+    it('detects not-found from multiple shapes', () => {
+      expect(isNotFoundError({ status: 404 })).toBe(true);
+      expect(isNotFoundError({ httpResponseCode: 404 })).toBe(true);
+      expect(isNotFoundError({ status: 500 })).toBe(false);
+    });
   });
 
   describe('shouldRetryError', () => {
@@ -77,7 +96,7 @@ describe('errorHandling', () => {
       });
     });
 
-    it('should retry on unknown errors by default', () => {
+    it('should not retry on unknown errors by default', () => {
       const errors = [
         { message: 'Unknown error' },
         { code: 'UNKNOWN_CODE' },
@@ -85,13 +104,57 @@ describe('errorHandling', () => {
       ];
 
       errors.forEach(error => {
-        expect(shouldRetryError(error)).toBe(true);
+        expect(shouldRetryError(error)).toBe(false);
       });
     });
 
     it('should handle null/undefined errors by throwing', () => {
       expect(() => shouldRetryError(null)).toThrow();
       expect(() => shouldRetryError(undefined)).toThrow();
+    });
+
+    it('should honor FjellHttpError.isRetryable and fall back to status', () => {
+      const retryable = new FjellHttpError(
+        'retry me',
+        {
+          code: 'SERVER_ERROR',
+          message: 'retry me',
+          operation: { type: 'get', name: 'get', params: {} },
+          context: { itemType: 'test' },
+          details: { retryable: true }
+        },
+        503,
+        { method: 'GET', url: '/x' }
+      );
+      expect(shouldRetryError(retryable)).toBe(true);
+
+      const nonRetryable5xx = new FjellHttpError(
+        'server',
+        {
+          code: 'SERVER_ERROR',
+          message: 'server',
+          operation: { type: 'get', name: 'get', params: {} },
+          context: { itemType: 'test' },
+          details: { retryable: false }
+        },
+        500,
+        { method: 'GET', url: '/x' }
+      );
+      expect(shouldRetryError(nonRetryable5xx)).toBe(true);
+
+      const clientError = new FjellHttpError(
+        'bad',
+        {
+          code: 'CLIENT_ERROR',
+          message: 'bad',
+          operation: { type: 'get', name: 'get', params: {} },
+          context: { itemType: 'test' },
+          details: { retryable: false }
+        },
+        400,
+        { method: 'GET', url: '/x' }
+      );
+      expect(shouldRetryError(clientError)).toBe(false);
     });
   });
 
