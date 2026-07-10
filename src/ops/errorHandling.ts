@@ -5,12 +5,35 @@
 import { isFjellHttpError } from '@fjell/http-api';
 
 /**
+ * Extract an HTTP status code from common error shapes
+ * (legacy `{ status }`, FjellHttpError `httpResponseCode`, Express-style `statusCode`).
+ */
+export function getHttpStatus(error: any): number | void {
+  if (!error || typeof error !== 'object') {
+    return;
+  }
+  const status = error.status ?? error.httpResponseCode ?? error.statusCode;
+  return typeof status === 'number' ? status : void 0;
+}
+
+/**
+ * True when the error represents an HTTP 404 Not Found.
+ */
+export function isNotFoundError(error: any): boolean {
+  return getHttpStatus(error) === 404;
+}
+
+/**
  * Determines if an error should be retried based on error type and status code
  */
 export function shouldRetryError(error: any): boolean {
-  // Check FjellHttpError retryable flag first
+  // Check FjellHttpError: honor explicit retryable flag, else fall back to status
   if (isFjellHttpError(error)) {
-    return error.isRetryable();
+    if (error.isRetryable()) {
+      return true;
+    }
+    const code = error.httpResponseCode;
+    return code >= 500 || code === 429;
   }
 
   // Retry on network errors and timeouts
@@ -22,18 +45,20 @@ export function shouldRetryError(error: any): boolean {
     return true;
   }
 
+  const status = getHttpStatus(error);
+
   // Retry on HTTP 5xx errors and 429 (rate limiting)
-  if (error.status >= 500 || error.status === 429) {
+  if (status !== void 0 && (status >= 500 || status === 429)) {
     return true;
   }
 
   // Don't retry on 4xx client errors (except 429)
-  if (error.status >= 400 && error.status < 500 && error.status !== 429) {
+  if (status !== void 0 && status >= 400 && status < 500 && status !== 429) {
     return false;
   }
 
-  // Default to retrying unknown errors
-  return true;
+  // Do not retry unrecognized / validation / plain errors by default
+  return false;
 }
 
 /**
@@ -66,8 +91,8 @@ export function enhanceError(error: any, context: any): any {
   // Add context to the error
   const enhancedError = new Error(error.message || 'HTTP operation failed');
   Object.assign(enhancedError, {
-    code: error.code || error.status || 'UNKNOWN_ERROR',
-    status: error.status,
+    code: error.code || error.status || error.httpResponseCode || 'UNKNOWN_ERROR',
+    status: getHttpStatus(error),
     context,
     originalError: error
   });
@@ -161,7 +186,7 @@ export async function executeWithRetry<T>(
         logger.debug(`Not retrying ${operationName} operation due to non-retryable error`, {
           ...operationContext,
           errorMessage: error.message,
-          errorCode: error.code || error.status,
+          errorCode: error.code || getHttpStatus(error),
           attempt: attempt + 1
         });
         break;
@@ -173,7 +198,7 @@ export async function executeWithRetry<T>(
       logger.warning(`Retrying ${operationName} operation (attempt ${attempt + 2}) after ${delay}ms`, {
         ...operationContext,
         errorMessage: error.message,
-        errorCode: error.code || error.status,
+        errorCode: error.code || getHttpStatus(error),
         delay,
         attemptNumber: attempt + 1
       });

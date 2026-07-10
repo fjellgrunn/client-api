@@ -34,6 +34,14 @@ export const getActionOperation = <
       requestOptions,
     );
 
+    if (!Array.isArray(response) || response.length < 2) {
+      throw new Error(
+        `Invalid action response: expected [item, affectedItems] tuple, got ${
+          Array.isArray(response) ? `array of length ${response.length}` : typeof response
+        }`
+      );
+    }
+
     const [item, affectedItems] = response;
     return [
       await utilities.processOne(Promise.resolve(item)),

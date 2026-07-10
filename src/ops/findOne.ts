@@ -48,11 +48,22 @@ export const getFindOneOperation = <
       isAuthenticated: apiOptions.allAuthenticated
     });
 
-    const results = await utilities.processArray(
-      api.httpGet<V[]>(
-        utilities.getPath(loc),
-        requestOptions,
-      ));
+    const raw = await api.httpGet<V | V[]>(
+      utilities.getPath(loc),
+      requestOptions,
+    );
+
+    // Normalize single-object or array responses (and FindOperationResult-like shapes)
+    let itemsArray: V[] = [];
+    if (Array.isArray(raw)) {
+      itemsArray = raw;
+    } else if (raw != null && typeof raw === 'object' && Array.isArray((raw as any).items)) {
+      itemsArray = (raw as any).items;
+    } else if (raw != null && typeof raw === 'object') {
+      itemsArray = [raw as V];
+    }
+
+    const results = await utilities.processArray(Promise.resolve(itemsArray));
     
     const result = results[0];
     if (result) {

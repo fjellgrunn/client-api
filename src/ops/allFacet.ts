@@ -36,11 +36,28 @@ export const getAllFacetOperation = <
 
     const loc: LocKeyArray<L1, L2, L3, L4, L5> | [] = locations;
 
-    // TODO: This should respond to either a single object, or multiple objects in an array.
-    return api.httpGet<V[]>(
+    const raw = await api.httpGet<V | V[]>(
       `${utilities.getPath(loc)}/${facet}`,
       requestOptions,
-    )
+    );
+
+    // Normalize single-object or array facet responses (servers may return either)
+    let items: V[] = [];
+    if (Array.isArray(raw)) {
+      items = raw;
+    } else if (raw != null && typeof raw === 'object') {
+      items = [raw as V];
+    } else if (raw == null) {
+      items = [];
+    } else {
+      logger.warning('Unexpected allFacet response shape', {
+        facet,
+        resultType: typeof raw,
+      });
+      items = [];
+    }
+
+    return utilities.processArray(Promise.resolve(items));
   };
 
   return allFacet;
